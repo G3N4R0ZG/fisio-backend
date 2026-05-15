@@ -196,6 +196,7 @@ app.get('/api/records/:patientId', async (req, res) => {
             .limit(1);
         if (error) throw error;
         
+        // Obtener archivos del bucket de storage
         const { data: files, error: filesError } = await supabase
             .storage
             .from('patient-files')
@@ -203,13 +204,22 @@ app.get('/api/records/:patientId', async (req, res) => {
         
         if (filesError && !filesError.message.includes('not found')) throw filesError;
         
-        const formattedFiles = (files || []).map(file => ({
-            id: file.id,
-            original_name: file.name,
-            filename: file.name,
-            uploaded_at: file.created_at,
-            file_type: file.metadata?.mimetype || 'application/octet-stream'
-        }));
+        // Generar URLs públicas para cada archivo
+        const formattedFiles = (files || []).map(file => {
+            const { data: urlData } = supabase
+                .storage
+                .from('patient-files')
+                .getPublicUrl(`${patientId}/${file.name}`);
+            
+            return {
+                id: file.id,
+                original_name: file.name,
+                filename: file.name,
+                uploaded_at: file.created_at,
+                file_type: file.metadata?.mimetype || 'application/octet-stream',
+                url: urlData.publicUrl  // ← URL pública de Supabase
+            };
+        });
         
         res.json({ 
             notes: data?.[0]?.notes || '',
@@ -237,6 +247,7 @@ app.post('/api/records', async (req, res) => {
     }
 });
 
+// Subir archivo a Supabase Storage
 app.post('/api/records/upload/:patientId', upload.single('file'), async (req, res) => {
     try {
         const { patientId } = req.params;
@@ -250,6 +261,7 @@ app.post('/api/records/upload/:patientId', upload.single('file'), async (req, re
         const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
         const filePath = `${patientId}/${timestamp}-${safeName}`;
         
+        // Subir a Supabase Storage
         const { data, error } = await supabase
             .storage
             .from('patient-files')
@@ -260,6 +272,7 @@ app.post('/api/records/upload/:patientId', upload.single('file'), async (req, re
         
         if (error) throw error;
         
+        // Obtener URL pública
         const { data: urlData } = supabase
             .storage
             .from('patient-files')
@@ -270,7 +283,7 @@ app.post('/api/records/upload/:patientId', upload.single('file'), async (req, re
             file: {
                 name: file.originalname,
                 path: filePath,
-                url: urlData.publicUrl
+                url: urlData.publicUrl  // ← URL pública de Supabase
             }
         });
     } catch (error) {
@@ -279,6 +292,7 @@ app.post('/api/records/upload/:patientId', upload.single('file'), async (req, re
     }
 });
 
+// Eliminar archivo de Supabase Storage
 app.delete('/api/records/file/:fileId', async (req, res) => {
     try {
         const { fileId } = req.params;
