@@ -14,11 +14,11 @@ const SUPABASE_ANON_KEY = 'sb_publishable_IOWYdr0tifgLAyHcAQmbUg_QPiW1222';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Configuración de multer para archivos en memoria
+// Configuración de multer
 const storage = multer.memoryStorage();
-const upload = multer({ 
+const upload = multer({
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB máximo
+    limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -51,7 +51,6 @@ app.get('/api/patients', async (req, res) => {
         if (error) throw error;
         res.json(data || []);
     } catch (error) {
-        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -66,7 +65,6 @@ app.post('/api/patients', async (req, res) => {
         if (error) throw error;
         res.json(data[0]);
     } catch (error) {
-        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -82,7 +80,6 @@ app.put('/api/patients/:id', async (req, res) => {
         if (error) throw error;
         res.json({ message: 'Actualizado' });
     } catch (error) {
-        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -97,7 +94,6 @@ app.delete('/api/patients/:id', async (req, res) => {
         if (error) throw error;
         res.json({ message: 'Eliminado' });
     } catch (error) {
-        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -117,7 +113,6 @@ app.get('/api/appointments', async (req, res) => {
         }));
         res.json(result);
     } catch (error) {
-        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -134,7 +129,6 @@ app.post('/api/appointments', async (req, res) => {
         if (error) throw error;
         res.json(data[0]);
     } catch (error) {
-        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -149,7 +143,6 @@ app.patch('/api/appointments/:id/confirm', async (req, res) => {
         if (error) throw error;
         res.json({ message: 'Confirmada' });
     } catch (error) {
-        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -164,7 +157,6 @@ app.patch('/api/appointments/:id/cancel', async (req, res) => {
         if (error) throw error;
         res.json({ message: 'Cancelada' });
     } catch (error) {
-        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -179,7 +171,6 @@ app.delete('/api/appointments/:id', async (req, res) => {
         if (error) throw error;
         res.json({ message: 'Eliminada' });
     } catch (error) {
-        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -195,33 +186,33 @@ app.get('/api/records/:patientId', async (req, res) => {
             .order('updated_at', { ascending: false })
             .limit(1);
         if (error) throw error;
-        
-        // Obtener archivos del bucket de storage
+
         const { data: files, error: filesError } = await supabase
             .storage
             .from('patient-files')
             .list(patientId);
-        
+
         if (filesError && !filesError.message.includes('not found')) throw filesError;
-        
-        // Generar URLs públicas para cada archivo
+
         const formattedFiles = (files || []).map(file => {
+            const filePath = `${patientId}/${file.name}`;
             const { data: urlData } = supabase
                 .storage
                 .from('patient-files')
-                .getPublicUrl(`${patientId}/${file.name}`);
-            
+                .getPublicUrl(filePath);
+
             return {
                 id: file.id,
                 original_name: file.name,
                 filename: file.name,
+                path: filePath,
                 uploaded_at: file.created_at,
                 file_type: file.metadata?.mimetype || 'application/octet-stream',
-                url: urlData.publicUrl  // ← URL pública de Supabase
+                url: urlData.publicUrl
             };
         });
-        
-        res.json({ 
+
+        res.json({
             notes: data?.[0]?.notes || '',
             diagnosis: data?.[0]?.diagnosis || '',
             treatment: data?.[0]?.treatment || '',
@@ -242,61 +233,67 @@ app.post('/api/records', async (req, res) => {
         if (error) throw error;
         res.json({ message: 'Guardado' });
     } catch (error) {
-        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Subir archivo a Supabase Storage
+// Subir archivo
 app.post('/api/records/upload/:patientId', upload.single('file'), async (req, res) => {
     try {
         const { patientId } = req.params;
         const file = req.file;
-        
+
         if (!file) {
             return res.status(400).json({ error: 'No se subió ningún archivo' });
         }
-        
+
         const timestamp = Date.now();
         const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
         const filePath = `${patientId}/${timestamp}-${safeName}`;
-        
-        // Subir a Supabase Storage
-        const { data, error } = await supabase
+
+        const { error } = await supabase
             .storage
             .from('patient-files')
             .upload(filePath, file.buffer, {
                 contentType: file.mimetype,
                 cacheControl: '3600'
             });
-        
+
         if (error) throw error;
-        
-        // Obtener URL pública
+
         const { data: urlData } = supabase
             .storage
             .from('patient-files')
             .getPublicUrl(filePath);
-        
-        res.json({ 
+
+        res.json({
             message: 'Archivo subido correctamente',
             file: {
                 name: file.originalname,
                 path: filePath,
-                url: urlData.publicUrl  // ← URL pública de Supabase
+                url: urlData.publicUrl
             }
         });
     } catch (error) {
-        console.error('Error subiendo archivo:', error);
+        console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Eliminar archivo de Supabase Storage
-app.delete('/api/records/file/:fileId', async (req, res) => {
+// Eliminar archivo
+app.delete('/api/records/file/:filePath', async (req, res) => {
     try {
-        const { fileId } = req.params;
-        res.json({ message: 'Eliminado' });
+        const { filePath } = req.params;
+        const decodedPath = decodeURIComponent(filePath);
+
+        const { error } = await supabase
+            .storage
+            .from('patient-files')
+            .remove([decodedPath]);
+
+        if (error) throw error;
+
+        res.json({ message: 'Archivo eliminado correctamente' });
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ error: error.message });
