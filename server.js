@@ -34,7 +34,7 @@ const upload = multer({
 // ============ LOGIN ============
 app.post('/api/auth/login', (req, res) => {
     const { email, password } = req.body;
-    if (email === 'admin@fisio.com' && password === '1234') {
+    if (email === 'yessadmin@fisiolibaj.com' && password === 'Libaj@33$$fisio#') {
         res.json({ success: true, message: 'Login exitoso' });
     } else {
         res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
