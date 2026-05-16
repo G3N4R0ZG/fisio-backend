@@ -14,9 +14,9 @@ const SUPABASE_ANON_KEY = 'sb_publishable_IOWYdr0tifgLAyHcAQmbUg_QPiW1222';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Configuración de multer
+// Configuración de multer para archivos
 const storage = multer.memoryStorage();
-const upload = multer({
+const upload = multer({ 
     storage: storage,
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
@@ -34,7 +34,7 @@ const upload = multer({
 // ============ LOGIN ============
 app.post('/api/auth/login', (req, res) => {
     const { email, password } = req.body;
-    if (email === 'yessadmin@fisiolibaj.com' && password === 'Libaj@33$$fisio#') {
+    if (email === 'admin@fisio.com' && password === '1234') {
         res.json({ success: true, message: 'Login exitoso' });
     } else {
         res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
@@ -147,6 +147,22 @@ app.patch('/api/appointments/:id/confirm', async (req, res) => {
     }
 });
 
+// ✅ NUEVA RUTA: Poner cita como pendiente
+app.patch('/api/appointments/:id/pending', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { error } = await supabase
+            .from('appointments')
+            .update({ status: 'pendiente' })
+            .eq('id', id);
+        if (error) throw error;
+        res.json({ message: 'Cita marcada como pendiente' });
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.patch('/api/appointments/:id/cancel', async (req, res) => {
     try {
         const { id } = req.params;
@@ -237,62 +253,33 @@ app.post('/api/records', async (req, res) => {
     }
 });
 
-// Subir archivo
 app.post('/api/records/upload/:patientId', upload.single('file'), async (req, res) => {
     try {
         const { patientId } = req.params;
         const file = req.file;
-
-        if (!file) {
-            return res.status(400).json({ error: 'No se subió ningún archivo' });
-        }
-
+        if (!file) return res.status(400).json({ error: 'No se subió ningún archivo' });
         const timestamp = Date.now();
         const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
         const filePath = `${patientId}/${timestamp}-${safeName}`;
-
         const { error } = await supabase
             .storage
             .from('patient-files')
-            .upload(filePath, file.buffer, {
-                contentType: file.mimetype,
-                cacheControl: '3600'
-            });
-
+            .upload(filePath, file.buffer, { contentType: file.mimetype, cacheControl: '3600' });
         if (error) throw error;
-
-        const { data: urlData } = supabase
-            .storage
-            .from('patient-files')
-            .getPublicUrl(filePath);
-
-        res.json({
-            message: 'Archivo subido correctamente',
-            file: {
-                name: file.originalname,
-                path: filePath,
-                url: urlData.publicUrl
-            }
-        });
+        const { data: urlData } = supabase.storage.from('patient-files').getPublicUrl(filePath);
+        res.json({ message: 'Archivo subido correctamente', file: { name: file.originalname, path: filePath, url: urlData.publicUrl } });
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Eliminar archivo
 app.delete('/api/records/file/:filePath', async (req, res) => {
     try {
         const { filePath } = req.params;
         const decodedPath = decodeURIComponent(filePath);
-
-        const { error } = await supabase
-            .storage
-            .from('patient-files')
-            .remove([decodedPath]);
-
+        const { error } = await supabase.storage.from('patient-files').remove([decodedPath]);
         if (error) throw error;
-
         res.json({ message: 'Archivo eliminado correctamente' });
     } catch (error) {
         console.error('Error:', error);
